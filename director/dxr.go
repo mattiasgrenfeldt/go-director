@@ -2,14 +2,22 @@ package director
 
 import (
 	"fmt"
-	"io"
+	"os"
 )
 
 type DXR struct{}
 
-func Parse(r io.Reader) {
+func ParseDXR(r *os.File) DXR {
 	rifx := parseRifx(r)
 
-	c := rifx.chunks[0]
-	fmt.Printf("%v %v %v\n", c.fourCC, len(c.data), c.data)
+	/*
+		for _, c := range rifx.chunks {
+			fmt.Printf("%q %v %v\n", c.fourCC, c.offset, c.size)
+		}
+	*/
+
+	imap := ParseImap(r, rifx.chunks[0])
+	fmt.Printf("%v %v %v %v\n", imap.MemMapCount, imap.MemMapPos, imap.MemMapVersion, imap.Unknown)
+
+	return DXR{}
 }

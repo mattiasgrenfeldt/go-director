@@ -8,18 +8,29 @@ import (
 const bigEndianMagic = "RIFX"
 const littleEndianMagic = "XFIR"
 
+// rifx has the following structure:
+//  RIFX or XFIR    - string  - 4 bytes - this decides whether the rest of the file is bigEndian or littleEndian respectively. This even controls whether fourCCs are reversed or not.
+//  size            - uint32  - 4 bytes - amount of data to follow.
+//  directorVersion - string  - 4 bytes - Example "MV93".
+//  chunks          - []chunk - (size-4) bytes
 type rifx struct {
 	littleEndian    bool
 	directorVersion string
-	chunks          []*rifxChunk
+	chunks          []rifxChunk
 }
 
+// rifxChunk has the following structure:
+//  fourCC - string - 4 bytes
+//  size   - uint32 - 4 bytes
+//  data   - []byte - size bytes
 type rifxChunk struct {
-	fourCC string
-	data   []byte
+	littleEndian bool
+	fourCC       string
+	size         uint32
+	offset       int64
 }
 
-func parseRifx(r io.Reader) *rifx {
+func parseRifx(r io.ReadSeeker) rifx {
 	magic := readFourCC(r, false)
 	var le bool
 	if magic == bigEndianMagic {
@@ -30,70 +41,38 @@ func parseRifx(r io.Reader) *rifx {
 		panic("Bad magic")
 	}
 
-	size := readUint32(r, le)
+	size := int64(readUint32(r, le))
 	version := readFourCC(r, le)
 
-	read := uint32(4)
-	var chunks []*rifxChunk
-	for read != size {
-		c := parseRifxChunk(r, le)
-		n := len(c.data)
-		read += uint32(n + (n % 2) + 8) // (c.size % 2) is for extra pad byte.
+	offset := int64(12)
+	var chunks []rifxChunk
+	for offset != size+8 {
+		c := parseRifxChunk(r, le, offset)
+		offset += int64(c.size + (c.size % 2) + 8) // (c.size % 2) is for extra pad byte.
 		chunks = append(chunks, c)
 	}
+	_, err := r.Read([]byte{1})
+	if err != io.EOF {
+		log.Fatalf("parseRifx: More data at end of file")
+	}
 
-	return &rifx{littleEndian: le, directorVersion: version, chunks: chunks}
+	return rifx{littleEndian: le, directorVersion: version, chunks: chunks}
 }
 
-func parseRifxChunk(r io.Reader, littleEndian bool) *rifxChunk {
+func parseRifxChunk(r io.ReadSeeker, littleEndian bool, offset int64) rifxChunk {
 	fourCC := readFourCC(r, littleEndian)
 	size := readUint32(r, littleEndian)
-	data := make([]byte, size)
-	n, err := r.Read(data)
-	if err != nil || n != int(size) {
-		log.Fatalf("parseRifxChunk bad reader err: %v n: %v\n", err, n)
+	_, err := r.Seek(int64(size), io.SeekCurrent)
+	if err != nil {
+		log.Fatalf("parseRifxChunk got err while seeking: %v", err)
 	}
 	if size%2 != 0 {
 		// Odd size, read one pad byte.
-		n, err := r.Read([]byte{0})
-		if err != nil || n != 1 {
-			log.Fatalf("parseRifxChunk failed to read pad byte, err: %v n: %v\n", err, n)
+		b := make([]byte, 1)
+		n, err := r.Read(b)
+		if !(err == io.EOF || (err == nil && n == 1 && b[0] == 0)) {
+			log.Fatalf("parseRifxChunk failed to read pad byte, err: %v n: %v b[0]: %v\n", err, n, b[0])
 		}
 	}
-	return &rifxChunk{fourCC: fourCC, data: data}
-}
-
-func readInt32(r io.Reader, littleEndian bool) int32 {
-	return int32(readUint32(r, littleEndian))
-}
-
-func readUint32(r io.Reader, littleEndian bool) uint32 {
-	b := make([]byte, 4)
-	n, err := r.Read(b)
-	if err != nil || n != 4 {
-		log.Fatalf("readUint32 bad read err: %v n: %v\n", err, n)
-	}
-	var x uint32
-	if littleEndian {
-		x = (uint32(b[3]) << 24) + (uint32(b[2]) << 16) + (uint32(b[1]) << 8) + uint32(b[0])
-	} else {
-		x = (uint32(b[0]) << 24) + (uint32(b[1]) << 16) + (uint32(b[2]) << 8) + uint32(b[3])
-	}
-	return x
-}
-
-func readFourCC(r io.Reader, littleEndian bool) string {
-	b := make([]byte, 4)
-	n, err := r.Read(b)
-	if err != nil || n != 4 {
-		//panic("bad")
-		log.Fatalf("readFourCC bad read err: %v n: %v\n", err, n)
-	}
-	if littleEndian {
-		for i := 0; i < 2; i++ {
-			j := n - i - 1
-			b[i], b[j] = b[j], b[i]
-		}
-	}
-	return string(b)
+	return rifxChunk{littleEndian: littleEndian, fourCC: fourCC, size: size, offset: offset}
 }

@@ -20,5 +20,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	director.Parse(f)
+	director.ParseDXR(f)
 }
