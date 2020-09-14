@@ -42,14 +42,14 @@ const resourceLen = 4 + 4*3 + 4
 
 type Resource struct {
 	FourCC    string
-	Size      int32
-	Offset    int32
+	Size      uint32
+	Offset    uint32
 	Flags     uint32
 	LastResID int32
 }
 
 func (r Resource) String() string {
-	return fmt.Sprintf(`ChunkID:   %q
+	return fmt.Sprintf(`FourCC:   %q
 Size:      %v 0x%x
 Offset:    %v 0x%x
 Flags:     %v 0x%x
@@ -62,7 +62,6 @@ func ParseMmap(r io.ReadSeeker, c RifxChunk) Mmap {
 		log.Fatalf("ParseMmap fourCC got: %v want: %v", c.FourCC, mmapFourCC)
 	}
 
-	fmt.Printf("%v\n", c.Size-mmapHeaderLen)
 	if n := (c.Size - mmapHeaderLen) % resourceLen; n != 0 {
 		log.Fatalf("ParseMmap bad c.Size: %v (c.Size - mmapHeaderLen) %% resourceLen: %v", c.Size, n)
 	}
@@ -89,7 +88,7 @@ func ParseMmap(r io.ReadSeeker, c RifxChunk) Mmap {
 	var res []Resource
 	n := (c.Size - mmapHeaderLen) / resourceLen
 	for i := uint32(0); i < n; i++ {
-		res = append(res, ParseResource(r, c))
+		res = append(res, ParseResource(r, c.LittleEndian))
 	}
 
 	return Mmap{
@@ -104,15 +103,15 @@ func ParseMmap(r io.ReadSeeker, c RifxChunk) Mmap {
 	}
 }
 
-func ParseResource(r io.ReadSeeker, c RifxChunk) Resource {
-	fourCC := readFourCC(r, c.LittleEndian)
+func ParseResource(r io.ReadSeeker, littleEndian bool) Resource {
+	fourCC := readFourCC(r, littleEndian)
 	res := struct {
-		Size      int32
-		Offset    int32
+		Size      uint32
+		Offset    uint32
 		Flags     uint32
 		LastResID int32
 	}{}
-	err := binary.Read(r, byteOrder(c.LittleEndian), &res)
+	err := binary.Read(r, byteOrder(littleEndian), &res)
 	if err != nil {
 		log.Fatalf("ParseMmap couldn't read next Resource: %v", err)
 	}

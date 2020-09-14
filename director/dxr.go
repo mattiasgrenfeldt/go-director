@@ -19,10 +19,25 @@ func ParseDXR(r *os.File) DXR {
 		log.Fatalf("ParseDXR mmap is not second chunks, pos got: %v want: %v", imap.MmapPos, c1.Offset)
 	}
 	mmap := ParseMmap(r, c1)
-	fmt.Printf("-- Mmap\n%v\n", mmap)
+	//fmt.Printf("-- Mmap\n%v\n", mmap)
 
-	for i, r := range mmap.Resources {
-		fmt.Printf("-- Res %d\n%v\n", i, r)
+	/*
+		for i, r := range mmap.Resources {
+			fmt.Printf("-- Res %d\n%v\n", i, r)
+		}
+	*/
+
+	ktRes := mmap.Resources[3]
+	c2 := rifx.Chunks[2]
+	if ktRes.Offset != c2.Offset {
+		log.Fatalf("ParseDXR KEY* is not third chunks, pos got: %v want: %v", ktRes.Offset, c2.Offset)
+	}
+	keyTable := ParseKeyTable(r, c2)
+
+	fmt.Printf("-- KT\n%v\n", keyTable)
+
+	for i, e := range keyTable.Table {
+		fmt.Printf("-- %v\n%v\n", i, e)
 	}
 
 	return DXR{}
