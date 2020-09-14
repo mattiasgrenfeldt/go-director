@@ -76,3 +76,12 @@ func ParseRifxChunk(r io.ReadSeeker, littleEndian bool, offset uint32) RifxChunk
 	}
 	return RifxChunk{LittleEndian: littleEndian, FourCC: fourCC, Size: size, Offset: offset}
 }
+
+func (r Rifx) OffsetToChunk(offset uint32) (index int32, c RifxChunk) {
+	for i, c := range r.Chunks {
+		if c.Offset == offset {
+			return int32(i), c
+		}
+	}
+	return -1, RifxChunk{}
+}

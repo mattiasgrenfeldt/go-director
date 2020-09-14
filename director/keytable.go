@@ -93,3 +93,16 @@ func ParseKeyElement(r io.Reader, littleEndian bool) KeyElement {
 		FourCC:     readFourCC(r, littleEndian),
 	}
 }
+
+func (t KeyTable) Lookup(owner int32, fourCC string) int32 {
+	owned := int32(-1)
+	for _, e := range t.Table {
+		if e.OwnerResID == owner && e.FourCC == fourCC {
+			if owned != -1 {
+				panic("Already owned")
+			}
+			owned = e.OwnedResID
+		}
+	}
+	return owned
+}
